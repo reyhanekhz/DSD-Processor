@@ -7,28 +7,22 @@ module karatsuba (
     output reg done
 );
 
-    // Split inputs
     wire [7:0] x_low  = x[7:0];
     wire [7:0] x_high = x[15:8];
     wire [7:0] y_low  = y[7:0];
     wire [7:0] y_high = y[15:8];
 
-    // Wires for multiplier outputs
     wire [15:0] z0, z2, w0;
     wire d0, d2, d1;
 
-    // Start signals for each multiplier
     reg s0, s1, s2;
 
-    // Instantiate 3 parallel multipliers
     shift_and_add m0(.clk(clk), .reset(reset), .start(s0), .x(x_low),               .y(y_low),               .product(z0), .done(d0));
     shift_and_add m1(.clk(clk), .reset(reset), .start(s1), .x(x_high),              .y(y_high),              .product(z2), .done(d2));
     shift_and_add m2(.clk(clk), .reset(reset), .start(s2), .x(x_low + x_high),      .y(y_low + y_high),      .product(w0), .done(d1));
 
-    // Local registers for z1 and final product
     reg [15:0] z1;
 
-    // FSM states
 
     parameter IDLE = 2'b00, INIT = 2'b01, BUSY = 2'b10, FINISH = 2'b11;
     reg [1:0] state;
