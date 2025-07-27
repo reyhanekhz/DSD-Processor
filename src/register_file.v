@@ -11,6 +11,7 @@ module register_file (
 
 
     always @(posedge reset) begin
+        // -- Reset registers to 0 at first --
         x0 <= 16'b0;
         x1 <= 16'b0;
         x2 <= 16'b0;

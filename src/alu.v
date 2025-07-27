@@ -2,7 +2,7 @@ module alu (
     input [15:0] a, b,
     input [2:0] opcode,
     input clk, reset, start,   
-    output reg [16:0] result_low, result_high,
+    output reg [15:0] result_low, result_high,
     output reg done
 );
 
@@ -41,6 +41,7 @@ module alu (
     reg [1:0] state;
 
     always @(posedge clk or posedge reset) begin
+        // -- Reset everything and set state as IDLE in the beginning --
         if (reset) begin
             result_low      <= 32'b0;
             result_high     <= 32'b0;
@@ -48,7 +49,10 @@ module alu (
             karatsuba_start <= 1'b0;
             div_start       <= 1'b0;
             state           <= IDLE;
-        end else begin
+        end 
+
+        // 75 -- 85
+        else begin
             case (state)
                 IDLE: begin
                     done <= 0;
@@ -59,13 +63,13 @@ module alu (
                         case (opcode)
                             3'b000: begin 
                                 result_low <= CSA_add_result;
-                                result_high <= {15'b0, cout_add}
-                                done <= 1'b1;
+                                result_high <= {15'b0, cout_add};
+                                done <= 1'b1; 
                             end
                             3'b001: begin
                                 result_low <= CSA_sub_result;
-                                result_high <= {16{cout_sub}}
-                                done <= 1'b1;
+                                result_high <= {16{cout_sub}};
+                                done <= 1'b1; 
                             end
                             3'b010: begin 
                                 karatsuba_start <= 1'b1; 

@@ -11,6 +11,8 @@ module shift_and_add (
 
     parameter IDLE = 2'b00, INIT = 2'b01, BUSY = 2'b10, FINISH = 2'b11;
 
+    reg [1:0] state;
+
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
