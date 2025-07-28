@@ -5,13 +5,15 @@ module restoring_division (
     output reg done
 );
 
-
     reg [4:0] count;
-    reg [15:0] temp_dividend, temp_divisor, temp_remainder, temp_quotient;
+    reg [15:0] temp_dividend, temp_divisor;
+    reg [16:0] temp_remainder;   
+    reg [15:0] temp_quotient;
 
-    parameter IDLE = 2'b00, INIT = 2'b01, DEVIDE = 2'b10, FINISH = 2'b11;
+    parameter IDLE = 2'b00, INIT = 2'b01, DIVIDE = 2'b10, FINISH = 2'b11;
 
     reg [1:0] state;
+    reg [16:0] sub_result;   
 
 
     always @(posedge clk or posedge reset) begin
@@ -21,7 +23,8 @@ module restoring_division (
             done <= 1'b0;
             remainder <= 16'b0;
             quotient <= 16'b0;
-        end
+        end 
+
         else begin
             case (state)
                 IDLE: begin
@@ -31,47 +34,45 @@ module restoring_division (
                     end
                 end
 
-
                 INIT: begin
                     temp_dividend <= dividend;
-                    temp_divisor <= divisor;
+                    temp_divisor  <= divisor;
+                    temp_remainder <= 17'b0;    
+                    temp_quotient <= 16'b0;     
                     count <= 5'b0;
-                    temp_remainder <= 16'b0;
-                    state <= DEVIDE;
+                    state <= DIVIDE;
                 end
 
+                DIVIDE: begin
+                    if (count < 16) begin
+                        temp_dividend  <= temp_dividend << 1;
 
-                DEVIDE:begin
-                    if (count < 5'd16) begin
-                        temp_remainder <= {temp_remainder[14:0], temp_remainder[15]};
-                        temp_dividend <= (temp_dividend << 1);
+                        sub_result = {temp_remainder[15:0], temp_dividend[15]} - temp_divisor;
 
-                        temp_remainder <= (temp_remainder - temp_divisor);
-
-                        if (temp_remainder[15]) begin  
-                        temp_remainder <= temp_remainder + temp_divisor;
-                        quotient <= {quotient[14:0], 1'b0};
+                        if (sub_result[16]) begin
+                            temp_remainder <= {temp_remainder[15:0], temp_dividend[15]};
+                            temp_quotient  <= {temp_quotient[14:0], 1'b0};
                         end 
-
                         else begin
-                            quotient <= {quotient[14:0], 1'b1};
+                            temp_remainder <= sub_result;
+                            temp_quotient  <= {temp_quotient[14:0], 1'b1};
                         end
-                        
+
                         count <= count + 1;
                     end
-
                     else begin
                         state <= FINISH;
                     end
                 end
 
+
                 FINISH: begin
-                    remainder <= temp_remainder;
+                    quotient  <= temp_quotient;
+                    remainder <= temp_remainder[15:0];
                     done <= 1'b1;
                     state <= IDLE;
                 end
             endcase
         end
     end
-
 endmodule

@@ -60,12 +60,19 @@ module control_unit (
                 FETCH: begin // 25
                     mem_address <= PC;
                     mem_read_enable <= 1'b1;
+                    ready <= 1'b0;
                     state <= ACCESS_MEMORY;
                 end
 
                 ACCESS_MEMORY: begin // 35
                     mem_read_enable <= 1'b0;
-                    state <= DECODE;
+                    if (opcode == 3'b100) begin
+                        state <= WRITEBACK;
+                    end
+
+                    else begin
+                        state <= DECODE;
+                    end
                 end
 
                 DECODE: begin // 45
@@ -89,8 +96,10 @@ module control_unit (
                 EXECUTE: begin // 55
                     if (opcode == 3'b100 || opcode == 3'b101) begin
                         reg_read_addr1 <= base;
-                        effective_addr <= reg_read_data1 + {{7{address_imm[8]}}, address_imm};
-                        state <= MEMORY;
+                        if (opcode == 3'b101) begin
+                            reg_read_addr2 <= rd;
+                        end
+                        state <= RF_ACCESS;
                     end 
                     
                     else begin
@@ -101,14 +110,21 @@ module control_unit (
                 end
 
                 RF_ACCESS: begin //65
-                    alu_a <= reg_read_data1;
-                    alu_b <= reg_read_data2;
-                    alu_opcode <= opcode;
-                    alu_start <= 1'b1;
+                    if (opcode == 3'b100 || opcode == 3'b101) begin
+                        effective_addr <= reg_read_data1 + {{7{address_imm[8]}}, address_imm};
+                        state <= MEMORY;
+                    end
 
-                    state <= ALU_WAIT;
+                    else begin
+                        alu_a <= reg_read_data1;
+                        alu_b <= reg_read_data2;
+                        alu_opcode <= opcode;
+                        alu_start <= 1'b1;
+
+                        state <= ALU_WAIT;
+                    end
                 end
-                // 85
+
                 ALU_WAIT: begin
                     if (alu_done) begin
                         alu_start <= 1'b0;
@@ -123,11 +139,11 @@ module control_unit (
                     if (opcode == 3'b100) begin
                         mem_address <= effective_addr;
                         mem_read_enable <= 1'b1;
-                        state <= WRITEBACK;
+                        state <= ACCESS_MEMORY;
                     end else begin
                         mem_address <= effective_addr;
                         mem_write_enable <= 1'b1;
-                        mem_data_in <= reg_read_data1;
+                        mem_data_in <= reg_read_data2;
                         state <= COMPLETE;
                     end
                 end
