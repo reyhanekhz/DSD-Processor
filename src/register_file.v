@@ -3,21 +3,22 @@ module register_file (
     input write_enable,
     input [1:0] read_reg_index1, read_reg_index2,
     input [1:0] write_reg_index,
-    input [15:0] write_data,
-    output reg [15:0] reg_read_1, reg_read_2
+    input signed [15:0] write_data,
+    output reg signed [15:0] reg_read_1, reg_read_2
 );
 
-    reg [15:0] x0, x1, x2, x3;
+    reg signed [15:0] x0, x1, x2, x3;
 
 
     always @(posedge reset) begin
-        // -- Reset registers to 0 at first --
+        // Reset registers to 0 at first
         x0 <= 16'b0;
         x1 <= 16'b0;
         x2 <= 16'b0;
         x3 <= 16'b0;
     end
 
+    // Read on falling edge of clocks
     always @(negedge clk) begin
         case (read_reg_index1)
             2'b00: begin
@@ -51,6 +52,7 @@ module register_file (
     end
 
 
+    // Write on rising edge of clocks
     always @(posedge clk) begin
         if (write_enable == 1'b1) begin
             case (write_reg_index)

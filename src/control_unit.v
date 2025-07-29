@@ -1,21 +1,22 @@
 module control_unit (
     input clk, reset, start,
     output reg ready,
-    output reg [15:0] mem_address,
+    output reg [9:0] mem_address,
     output reg mem_write_enable, mem_read_enable,
-    output reg [15:0] mem_data_in,
-    input [15:0] mem_data_out,
+    output reg signed [15:0] mem_data_in,
+    input signed [15:0] mem_data_out,
     output reg reg_write_enable,
     output reg [1:0] reg_read_addr1, reg_read_addr2, reg_write_addr,
-    output reg [15:0] reg_write_data,
-    input [15:0] reg_read_data1, reg_read_data2,
+    output reg signed [15:0] reg_write_data,
+    input signed [15:0] reg_read_data1, reg_read_data2,
     output reg alu_start,
     output reg [2:0] alu_opcode,
-    output reg [15:0] alu_a, alu_b,
-    input [15:0] alu_result_low, alu_result_high,
+    output reg signed [15:0] alu_a, alu_b,
+    input signed [15:0] alu_result_low, alu_result_high,
     input alu_done
 );
 
+    // States
     parameter IDLE          = 4'd0;
     parameter FETCH         = 4'd1;
     parameter ACCESS_MEMORY = 4'd2;
@@ -26,22 +27,27 @@ module control_unit (
     parameter MEMORY        = 4'd7;
     parameter WRITEBACK     = 4'd8;
     parameter COMPLETE      = 4'd9;
+    reg [3:0] state, previous_state;
 
-    reg [3:0] state;
 
-    reg [15:0] PC;
+
+    // PC register
+    reg [9:0] PC;
 
     reg [15:0] instr;
     reg [2:0] opcode;
     reg [1:0] rd, rs1, rs2, base;
-    reg [8:0] address_imm;
+    reg [8:0] address_imm;       
 
-    reg [15:0] effective_addr;
+    reg [9:0] effective_addr; // Address for load/store
+
+
+
 
     always @(posedge clk or posedge reset) begin
-        // -- Reset everything and set state as IDLE in the beginning --
+        // Reset everything and set state as IDLE in the beginning
         if (reset) begin
-            PC <= 16'b0;
+            PC <= 10'b0;
             state <= IDLE;
             ready <= 1'b0;
             mem_read_enable <= 1'b0;
@@ -52,67 +58,85 @@ module control_unit (
         
         else begin
             case (state)
-                IDLE: begin // 15
+                IDLE: begin
                     ready <= 0;
-                    if (start) state <= FETCH;
+                    if (start) begin
+                        state <= FETCH;
+                        previous_state <= IDLE;
+                    end
                 end
 
-                FETCH: begin // 25
+                FETCH: begin // read instruction from memory 
                     mem_address <= PC;
                     mem_read_enable <= 1'b1;
                     ready <= 1'b0;
                     state <= ACCESS_MEMORY;
+                    previous_state <= FETCH;
                 end
 
-                ACCESS_MEMORY: begin // 35
+                ACCESS_MEMORY: begin // One cycle to read form memory
                     mem_read_enable <= 1'b0;
-                    if (opcode == 3'b100) begin
+
+                    // Writeback to register file when LOAD
+                    if (previous_state == MEMORY) begin
                         state <= WRITEBACK;
+                        previous_state <= ACCESS_MEMORY;
                     end
 
                     else begin
                         state <= DECODE;
+                        previous_state <= ACCESS_MEMORY;
                     end
                 end
 
-                DECODE: begin // 45
+                DECODE: begin
                     instr <= mem_data_out;
 
                     opcode <= mem_data_out[15:13];
 
+                    // M-type format
                     if (mem_data_out[15:13] == 3'b100 || mem_data_out[15:13] == 3'b101) begin
                         rd <= mem_data_out[12:11];
                         base <= mem_data_out[10:9];
                         address_imm <= mem_data_out[8:0];
                         state <= EXECUTE;
-                    end else begin
+                        previous_state <= DECODE;
+                    end 
+                    
+                    // R-type format
+                    else begin
                         rd <= mem_data_out[12:11];
                         rs1 <= mem_data_out[10:9];
                         rs2 <= mem_data_out[8:7];
                         state <= EXECUTE;
+                        previous_state <= DECODE;
                     end
                 end
 
-                EXECUTE: begin // 55
+                EXECUTE: begin
                     if (opcode == 3'b100 || opcode == 3'b101) begin
                         reg_read_addr1 <= base;
+                        // Read rd to store in memory
                         if (opcode == 3'b101) begin
                             reg_read_addr2 <= rd;
                         end
                         state <= RF_ACCESS;
+                        previous_state <= EXECUTE;
                     end 
                     
                     else begin
                         reg_read_addr1 <= rs1;
                         reg_read_addr2 <= rs2;
                         state <= RF_ACCESS;
+                        previous_state <= EXECUTE;
                     end
                 end
 
-                RF_ACCESS: begin //65
+                RF_ACCESS: begin // One half-cycle to access register file
                     if (opcode == 3'b100 || opcode == 3'b101) begin
-                        effective_addr <= reg_read_data1 + {{7{address_imm[8]}}, address_imm};
+                        effective_addr <= reg_read_data1[9:0] + {address_imm[8], address_imm};
                         state <= MEMORY;
+                        previous_state <= RF_ACCESS;
                     end
 
                     else begin
@@ -122,32 +146,41 @@ module control_unit (
                         alu_start <= 1'b1;
 
                         state <= ALU_WAIT;
+                        previous_state <= RF_ACCESS;
                     end
                 end
 
                 ALU_WAIT: begin
+                    // Wait till ALU is done
                     if (alu_done) begin
                         alu_start <= 1'b0;
                         reg_write_addr <= rd;
                         reg_write_data <= alu_result_low[15:0];
                         reg_write_enable <= 1'b1;
                         state <= WRITEBACK;
+                        previous_state <= ALU_WAIT;
                     end
                 end
 
                 MEMORY: begin
+                    // Load
                     if (opcode == 3'b100) begin
                         mem_address <= effective_addr;
                         mem_read_enable <= 1'b1;
                         state <= ACCESS_MEMORY;
-                    end else begin
+                        previous_state <= MEMORY;
+                    end 
+                    
+                    // Store
+                    else begin
                         mem_address <= effective_addr;
                         mem_write_enable <= 1'b1;
                         mem_data_in <= reg_read_data2;
                         state <= COMPLETE;
+                        previous_state <= MEMORY;
                     end
                 end
-                //95 
+ 
                 WRITEBACK: begin
                     mem_read_enable <= 1'b0;
                     if (opcode == 3'b100) begin
@@ -156,6 +189,7 @@ module control_unit (
                         reg_write_data <= mem_data_out;
                     end
                     state <= COMPLETE;
+                    previous_state <= WRITEBACK;
                 end
 
                 COMPLETE: begin
@@ -165,6 +199,7 @@ module control_unit (
                     PC <= PC + 1;
                     ready <= 1'b1;
                     state <= FETCH;
+                    previous_state <= COMPLETE;
                 end
 
             endcase
